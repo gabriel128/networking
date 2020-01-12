@@ -4,11 +4,33 @@
 #include <sys/socket.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <unistd.h>
+#include <signal.h>
+
+sig_atomic_t volatile g_running = 1;
+int client_socket;
+int server_socket;
+FILE *index_file;
+
+void sig_handler(int signum)
+{
+  printf("\n User provided signal handler for Ctrl+C \n");
+
+  if (signum == SIGINT) {
+    g_running = 0;
+  }
+
+  shutdown(client_socket, 2);
+  shutdown(server_socket, 2);
+  fclose(index_file);
+
+  exit(1);
+}
 
 int main(int argc, char *argv[]) {
   int port = atoi(argv[1]);
 
-  FILE *index_file;
+
   index_file = fopen("index.html", "r");
 
   printf("Server Starting\n");
@@ -33,7 +55,7 @@ int main(int argc, char *argv[]) {
 
   // Socket stuff
 
-  int server_socket = socket(AF_INET, SOCK_STREAM, 0);
+  server_socket = socket(AF_INET, SOCK_STREAM, 0);
 
   struct sockaddr_in server_address;
   server_address.sin_family = AF_INET;
@@ -51,12 +73,14 @@ int main(int argc, char *argv[]) {
 
   printf("Listening\n");
 
-  int client_socket;
 
   char request[4096];
   char method[4];
 
-  while(1) {
+  signal(SIGINT, &sig_handler);
+
+  while(g_running) {
+    printf("g_running %d\n", g_running);
     printf("Waiting for Client\n");
     client_socket = accept(server_socket, NULL, NULL);
 
@@ -66,11 +90,10 @@ int main(int argc, char *argv[]) {
     method[4] = '\0';
 
     printf("Request method:\n%s\n", method);
-    printf("Full Request:\n%s\n", method);
+    printf("Full Request:\n%s\n", request);
     send(client_socket, http_header, sizeof(http_header), 0);
     shutdown(client_socket, 2);
   }
-
 
   shutdown(server_socket, 2);
   fclose(index_file);
